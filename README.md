@@ -52,4 +52,6 @@ docker run --rm -p 9917:9917 \
   translation-bot
 ```
 
-The container listens on `0.0.0.0:9917`, reads `/app/config/.env`, and stores persistent state in `/app/data/main.sqlite`. When running in Docker, `127.0.0.1` points at the container; set `OLLAMA_URL` to an address the container can reach if Ollama runs on the host.
+The image includes Ollama and the `gemma3:1b` model. Its entrypoint starts Ollama on container loopback before starting the bot, so the default `OLLAMA_URL=http://127.0.0.1:11434` works without another service. Ollama is not exposed outside the container.
+
+The container listens on `0.0.0.0:9917`, reads `/app/config/.env`, and stores persistent state in `/app/data/main.sqlite`.
