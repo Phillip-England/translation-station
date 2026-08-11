@@ -36,6 +36,7 @@ const (
 
 	maxLoginFailures = 5
 	loginWindow      = 24 * time.Hour
+	requestLogLimit  = 20
 )
 
 type serverConfig struct {
@@ -82,6 +83,16 @@ type groupmeBot struct {
 	Enabled   bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type webhookRequestLog struct {
+	ID          int64
+	RequestedAt time.Time
+	IP          string
+	TokenStatus string
+	StatusCode  int
+	GroupID     string
+	Result      string
 }
 
 func main() {
@@ -188,6 +199,16 @@ func initAuthDB(path string) (*sql.DB, error) {
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS webhook_request_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			requested_at DATETIME NOT NULL,
+			ip TEXT NOT NULL,
+			token_status TEXT NOT NULL,
+			status_code INTEGER NOT NULL,
+			group_id TEXT NOT NULL DEFAULT '',
+			result TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS webhook_request_logs_requested_at_idx ON webhook_request_logs (requested_at DESC)`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -244,37 +265,59 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func (s *appServer) handleWebhook(c *gin.Context) {
-	if !constantTimeEqual(c.Query("translation-token"), s.cfg.TranslationToken) {
+	token := c.Query("translation-token")
+	tokenStatus := "invalid"
+	if token == "" {
+		tokenStatus = "missing"
+	} else if constantTimeEqual(token, s.cfg.TranslationToken) {
+		tokenStatus = "valid"
+	}
+	groupID := ""
+	result := "request received"
+	defer func() {
+		if err := s.recordWebhookRequest(clientIP(c.Request), tokenStatus, c.Writer.Status(), groupID, result); err != nil {
+			log.Printf("record webhook request: %v", err)
+		}
+	}()
+
+	if tokenStatus != "valid" {
+		result = "invalid translation token"
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid translation token"})
 		return
 	}
 
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
+		result = "could not read request body"
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	var message Message
 	if err := json.Unmarshal(body, &message); err != nil {
+		result = "invalid JSON body"
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	groupID = message.GroupID
 
 	groupmeBotID, err := s.botIDForGroup(message.GroupID)
 	if err != nil {
+		result = "group is not configured"
 		c.JSON(http.StatusNotFound, gin.H{"error": "group is not configured"})
 		return
 	}
 
 	targetLanguage, subString, ok := parseTranslationCommand(message.Text)
 	if !ok {
+		result = "no translation keyword provided"
 		c.JSON(http.StatusBadRequest, gin.H{"message": "no keyword provided"})
 		return
 	}
 
 	translatedText, err := translate(s.cfg.OllamaURL, s.cfg.OllamaModel, targetLanguage, subString)
 	if err != nil {
+		result = "translation failed: " + truncateLogValue(err.Error(), 180)
 		if errors.Is(err, errOllamaUnavailable) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
@@ -284,11 +327,42 @@ func (s *appServer) handleWebhook(c *gin.Context) {
 	}
 
 	if err := postGroupmeMessage(groupmeBotID, translatedText); err != nil {
+		result = "GroupMe post failed: " + truncateLogValue(err.Error(), 180)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	result = "translation posted to GroupMe"
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func truncateLogValue(value string, max int) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= max {
+		return value
+	}
+	return value[:max] + "…"
+}
+
+func (s *appServer) recordWebhookRequest(ip, tokenStatus string, statusCode int, groupID, result string) error {
+	if s.db == nil {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
+		`INSERT INTO webhook_request_logs (requested_at, ip, token_status, status_code, group_id, result) VALUES (?, ?, ?, ?, ?, ?)`,
+		time.Now(), truncateLogValue(ip, 100), tokenStatus, statusCode, truncateLogValue(groupID, 100), truncateLogValue(result, 240),
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM webhook_request_logs WHERE id NOT IN (SELECT id FROM webhook_request_logs ORDER BY id DESC LIMIT ?)`, requestLogLimit); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *appServer) botIDForGroup(groupID string) (string, error) {
@@ -593,8 +667,14 @@ func (s *appServer) handleAdmin(c *gin.Context) {
 		c.String(http.StatusInternalServerError, err.Error())
 		return
 	}
+	requests, err := s.listWebhookRequests()
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
 	renderHTML(c, adminTemplate, gin.H{
-		"Bots": bots,
+		"Bots":     bots,
+		"Requests": requests,
 	})
 }
 
@@ -679,6 +759,24 @@ func (s *appServer) listGroupmeBots() ([]groupmeBot, error) {
 	return bots, rows.Err()
 }
 
+func (s *appServer) listWebhookRequests() ([]webhookRequestLog, error) {
+	rows, err := s.db.Query(`SELECT id, requested_at, ip, token_status, status_code, group_id, result FROM webhook_request_logs ORDER BY id DESC LIMIT ?`, requestLogLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requests []webhookRequestLog
+	for rows.Next() {
+		var request webhookRequestLog
+		if err := rows.Scan(&request.ID, &request.RequestedAt, &request.IP, &request.TokenStatus, &request.StatusCode, &request.GroupID, &request.Result); err != nil {
+			return nil, err
+		}
+		requests = append(requests, request)
+	}
+	return requests, rows.Err()
+}
+
 func renderHTML(c *gin.Context, source string, data gin.H) {
 	tmpl := template.Must(template.New("page").Funcs(template.FuncMap{
 		"checked": func(v bool) template.HTMLAttr {
@@ -730,6 +828,33 @@ const adminTemplate = `<!doctype html>
   </header>
   <main>
     <section class="panel">
+      <div class="section-heading">
+        <h2>Latest translation requests</h2>
+        <span class="muted">Newest first · last 20 only</span>
+      </div>
+      {{if .Requests}}
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Time</th><th>Source IP</th><th>Token</th><th>Status</th><th>Group ID</th><th>Result</th></tr></thead>
+            <tbody>
+              {{range .Requests}}
+              <tr>
+                <td class="nowrap">{{.RequestedAt.Format "Jan 02, 2006 3:04:05 PM MST"}}</td>
+                <td><code>{{.IP}}</code></td>
+                <td><span class="badge token-{{.TokenStatus}}">{{.TokenStatus}}</span></td>
+                <td><span class="badge status-{{.StatusCode}}">{{.StatusCode}}</span></td>
+                <td><code>{{if .GroupID}}{{.GroupID}}{{else}}—{{end}}</code></td>
+                <td>{{.Result}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{else}}
+        <p class="muted">No translation requests have arrived yet.</p>
+      {{end}}
+    </section>
+    <section class="panel">
       <h2>Add mapping</h2>
       <form method="post" action="/admin/groupmes" class="grid-form">
         <label>Name <input name="name" required></label>
@@ -771,6 +896,8 @@ main { width: min(1180px, calc(100% - 32px)); margin: 28px auto; display: grid; 
 h1, h2 { margin: 0; line-height: 1.2; letter-spacing: 0; }
 h1 { font-size: 28px; }
 h2 { font-size: 18px; margin-bottom: 16px; }
+.section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.section-heading h2 { margin-bottom: 0; }
 .auth-shell { min-height: 100vh; display: grid; place-items: center; margin: 0 auto; }
 .panel { background: #ffffff; border: 1px solid #d9e0e7; border-radius: 8px; padding: 20px; box-shadow: 0 1px 2px rgb(24 33 47 / 0.05); }
 .login-panel { width: min(420px, calc(100vw - 32px)); display: grid; gap: 16px; }
@@ -786,6 +913,15 @@ button.secondary { color: #18212f; background: #e8edf2; }
 button.danger { background: #a8323a; }
 .error { margin: 0; color: #a8323a; font-weight: 700; }
 .muted { margin: 0; color: #68758a; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 12px; border-top: 1px solid #e6ebf0; text-align: left; vertical-align: top; }
+th { border-top: 0; color: #445166; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.nowrap { white-space: nowrap; }
+.badge { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 750; background: #e8edf2; }
+.token-valid { color: #126154; background: #dff4ed; }
+.token-invalid, .token-missing { color: #8d2830; background: #f9e2e4; }
 @media (max-width: 850px) {
   header { align-items: flex-start; flex-direction: column; }
   .grid-form, .mapping-row { grid-template-columns: 1fr; align-items: stretch; }

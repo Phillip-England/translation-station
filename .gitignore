@@ -1,3 +1,6 @@
 .env
 config/
 data/
+# uppr: never commit local configuration or application data
+/config/
+/data/

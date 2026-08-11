@@ -88,12 +88,70 @@ func TestInitAuthDBCreatesTables(t *testing.T) {
 	}
 	defer db.Close()
 
-	var name string
-	if err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'groupme_bots'`).Scan(&name); err != nil {
+	for _, table := range []string{"groupme_bots", "webhook_request_logs"} {
+		var name string
+		if err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		if name != table {
+			t.Fatalf("expected %s table, got %q", table, name)
+		}
+	}
+}
+
+func TestWebhookRequestLogKeepsLatestTwenty(t *testing.T) {
+	db, err := initAuthDB(filepath.Join(t.TempDir(), "data", "main.sqlite"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if name != "groupme_bots" {
-		t.Fatalf("expected groupme_bots table, got %q", name)
+	defer db.Close()
+
+	server := &appServer{db: db}
+	for i := 1; i <= 25; i++ {
+		if err := server.recordWebhookRequest("127.0.0.1", "invalid", http.StatusUnauthorized, "", "attempt"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	requests, err := server.listWebhookRequests()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != requestLogLimit {
+		t.Fatalf("expected %d requests, got %d", requestLogLimit, len(requests))
+	}
+	if requests[0].ID != 25 || requests[len(requests)-1].ID != 6 {
+		t.Fatalf("expected request IDs 25 through 6, got %d through %d", requests[0].ID, requests[len(requests)-1].ID)
+	}
+}
+
+func TestHandleWebhookRecordsInvalidTokenWithoutStoringIt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := initAuthDB(filepath.Join(t.TempDir(), "data", "main.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	server := &appServer{cfg: serverConfig{TranslationToken: "secret-token"}, db: db}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/?translation-token=wrong-secret", bytes.NewBufferString(`{"group_id":"group"}`))
+	server.handleWebhook(c)
+
+	requests, err := server.listWebhookRequests()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 1 || requests[0].TokenStatus != "invalid" || requests[0].StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unexpected request log: %+v", requests)
+	}
+	var leaked int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM webhook_request_logs WHERE result LIKE '%wrong-secret%'`).Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Fatal("request log stored the supplied token")
 	}
 }
 

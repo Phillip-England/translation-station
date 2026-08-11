@@ -22,7 +22,9 @@ TRANSLATION_TOKEN=replace-with-a-long-random-webhook-token
 
 ## Persistent Data
 
-The SQLite database is stored at `data/main.sqlite`. It contains admin login failure records and GroupMe group-to-bot mappings. The app creates the parent directory and database file on startup.
+The SQLite database is stored at `data/main.sqlite`. It contains admin login failure records, GroupMe group-to-bot mappings, and the latest 20 translation endpoint requests. The request history records whether the translation token was valid, missing, or invalid, but never stores the token itself.
+
+The request history is visible at `/admin` after signing in. It also shows each request's time, source IP, HTTP status, GroupMe group ID (when available), and processing result to help diagnose webhook failures.
 
 `data/` is ignored by Git.
 
