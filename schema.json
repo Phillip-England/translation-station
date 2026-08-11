@@ -1,0 +1,46 @@
+{
+  "variables": [
+    {
+      "name": "ADDR",
+      "description": "TCP address the HTTP server listens on. Use 0.0.0.0 inside Docker.",
+      "example": "0.0.0.0:9917",
+      "required": false
+    },
+    {
+      "name": "OLLAMA_URL",
+      "description": "Base URL for the Ollama server used to translate GroupMe messages.",
+      "example": "http://127.0.0.1:11434",
+      "required": false
+    },
+    {
+      "name": "OLLAMA_MODEL",
+      "description": "Ollama model used for translation.",
+      "example": "gemma3:1b",
+      "required": false
+    },
+    {
+      "name": "ADMIN_USERNAME",
+      "description": "Username for the private admin portal.",
+      "example": "admin",
+      "required": true
+    },
+    {
+      "name": "ADMIN_PASSWORD",
+      "description": "Password for the private admin portal.",
+      "example": "change-this-password",
+      "required": true
+    },
+    {
+      "name": "SESSION_SECRET",
+      "description": "Random secret used to sign admin session cookies.",
+      "example": "replace-with-a-long-random-secret",
+      "required": true
+    },
+    {
+      "name": "TRANSLATION_TOKEN",
+      "description": "Secret token required as the translation-token query parameter on GroupMe webhook posts.",
+      "example": "replace-with-a-long-random-webhook-token",
+      "required": true
+    }
+  ]
+}
