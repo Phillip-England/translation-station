@@ -1,6 +1,6 @@
 # translation-bot
 
-translation-bot receives GroupMe bot callbacks and reposts Ollama translations when a message starts with `$spanish` or `$english`. It immediately posts `Thinking...` after accepting a translation request, then posts the translation when Ollama finishes.
+translation-bot receives GroupMe bot callbacks and reposts Ollama translations when a message starts with `$spanish` or `$english`. It immediately posts `🤔` after accepting a translation request, then posts the translation when Ollama finishes.
 
 Configured GroupMe groups are managed in the private admin portal instead of hardcoded environment variables.
 
@@ -38,7 +38,7 @@ go run .
 
 Ollama must be running on the same system, or set `OLLAMA_URL` to the reachable Ollama server. If Ollama is unavailable when a translation request arrives, the webhook returns `503` with a message telling you Ollama is not running or reachable.
 
-Open `http://localhost:9917/admin` and sign in with the configured admin credentials. Add each GroupMe mapping with a display name, the GroupMe `group_id`, and the GroupMe bot ID that should repost translations into that group.
+Open `http://localhost:9917/` for the public overview and usage guide. Visit `http://localhost:9917/admin` and sign in with the configured admin credentials to add each GroupMe mapping with a display name, the GroupMe `group_id`, and the GroupMe bot ID that should repost translations into that group.
 
 Configure GroupMe to post webhooks to `http://localhost:9917/?translation-token=replace-with-a-long-random-webhook-token`, using your real public server URL and `TRANSLATION_TOKEN` value.
 

@@ -63,6 +63,26 @@ func TestHandleWebhookRequiresTranslationToken(t *testing.T) {
 	}
 }
 
+func TestHomePageDocumentsTranslationCommands(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	server := &appServer{}
+	server.registerRoutes(router)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected home page status 200, got %d", w.Code)
+	}
+	for _, content := range []string{"Translation Station", "$spanish", "$english", "🤔"} {
+		if !strings.Contains(w.Body.String(), content) {
+			t.Fatalf("home page is missing %q", content)
+		}
+	}
+}
+
 func TestEnsureAuthDBFilePrivatePermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "data", "main.sqlite")

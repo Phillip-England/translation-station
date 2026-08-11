@@ -239,6 +239,7 @@ func (s *appServer) registerRoutes(r *gin.Engine) {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
+	r.GET("/", s.handleHome)
 	r.POST("/", s.handleWebhook)
 	r.GET("/login", s.handleLoginPage)
 	r.POST("/login", s.handleLogin)
@@ -250,6 +251,10 @@ func (s *appServer) registerRoutes(r *gin.Engine) {
 	admin.POST("/groupmes", s.handleCreateGroupme)
 	admin.POST("/groupmes/:id", s.handleUpdateGroupme)
 	admin.POST("/groupmes/:id/delete", s.handleDeleteGroupme)
+}
+
+func (s *appServer) handleHome(c *gin.Context) {
+	renderHTML(c, homeTemplate, nil)
 }
 
 func CORSMiddleware() gin.HandlerFunc {
@@ -315,7 +320,7 @@ func (s *appServer) handleWebhook(c *gin.Context) {
 		return
 	}
 
-	if err := postGroupmeMessage(groupmeBotID, "Thinking..."); err != nil {
+	if err := postGroupmeMessage(groupmeBotID, "🤔"); err != nil {
 		result = "GroupMe acknowledgement failed: " + truncateLogValue(err.Error(), 180)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -809,6 +814,7 @@ const loginTemplate = `<!doctype html>
 <body>
   <main class="auth-shell">
     <form class="panel login-panel" method="post" action="/login">
+      <a class="brand" href="/">Translation Station</a>
       <h1>translation-bot</h1>
       {{if .Error}}<p class="error">Invalid username or password.</p>{{end}}
       <label>Username <input name="username" autocomplete="username" required></label>
@@ -816,6 +822,73 @@ const loginTemplate = `<!doctype html>
       <button type="submit">Sign in</button>
     </form>
   </main>
+</body>
+</html>`
+
+const homeTemplate = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Translation Station translates GroupMe messages between English and Spanish with a local Ollama model.">
+  <title>Translation Station</title>
+  <style>` + baseCSS + `</style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">Translation Station</a>
+    <nav aria-label="Primary navigation">
+      <a href="#how-it-works">How it works</a>
+      <a href="#usage">Usage</a>
+      <a class="button-link" href="/login">Admin</a>
+    </nav>
+  </header>
+  <main class="home">
+    <section class="hero">
+      <p class="eyebrow">GroupMe + Ollama</p>
+      <h1>Translation that stays<br><span>in the conversation.</span></h1>
+      <p class="lede">Translation Station watches for simple commands in configured GroupMe chats, translates with a locally hosted language model, and posts the result right back to the group.</p>
+      <div class="hero-actions">
+        <a class="button-link" href="#usage">View the commands</a>
+        <a class="text-link" href="/login">Manage groups <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="message-demo" aria-label="Example translation conversation">
+        <div class="message source"><span>You</span><p>$spanish See you tomorrow!</p></div>
+        <div class="message bot"><span>Translation Station</span><p>🤔</p></div>
+        <div class="message bot accent-message"><span>Translation Station</span><p>¡Nos vemos mañana!</p></div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="docs-section">
+      <div class="section-intro">
+        <p class="eyebrow">How it works</p>
+        <h2>One command. Three steps.</h2>
+      </div>
+      <div class="feature-grid">
+        <article class="panel feature"><span class="step">01</span><h3>Write a command</h3><p>Prefix a message with the language you want. Everything after the command is sent for translation.</p></article>
+        <article class="panel feature"><span class="step">02</span><h3>Ollama translates</h3><p>The bot acknowledges the request with 🤔 while the configured local model prepares a concise translation.</p></article>
+        <article class="panel feature"><span class="step">03</span><h3>GroupMe replies</h3><p>The finished translation is posted into the same conversation through its configured GroupMe bot.</p></article>
+      </div>
+    </section>
+
+    <section id="usage" class="docs-section usage-grid">
+      <div class="section-intro">
+        <p class="eyebrow">Usage</p>
+        <h2>Two commands.<br>Nothing else to learn.</h2>
+        <p class="muted">Commands are case-insensitive and require text after the language keyword.</p>
+      </div>
+      <div class="command-list">
+        <article class="command"><div><code>$spanish</code><p>Translate English or other source text into Spanish.</p></div><code class="example">$spanish How are you?</code></article>
+        <article class="command"><div><code>$english</code><p>Translate Spanish or other source text into English.</p></div><code class="example">$english Buenos días</code></article>
+      </div>
+    </section>
+
+    <section class="panel setup">
+      <div><p class="eyebrow">Administration</p><h2>Connect your GroupMe groups.</h2><p class="muted">Sign in to add each group ID and bot ID, enable or disable mappings, and review the latest webhook requests.</p></div>
+      <a class="button-link" href="/login">Open admin</a>
+    </section>
+  </main>
+  <footer><span>Translation Station</span><span>Powered by GroupMe and Ollama</span></footer>
 </body>
 </html>`
 
@@ -894,43 +967,94 @@ const adminTemplate = `<!doctype html>
 </html>`
 
 const baseCSS = `
-:root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #18212f; background: #f4f6f8; }
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #ffffff; background: #050505; --accent: #9b87f5; --accent-soft: rgb(155 135 245 / .14); --surface: #0d0d0f; --line: #28282d; --muted: #a4a4ad; }
 * { box-sizing: border-box; }
-body { margin: 0; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px clamp(16px, 4vw, 40px); background: #ffffff; border-bottom: 1px solid #d9e0e7; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: #050505; color: #ffffff; }
+a { color: inherit; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px clamp(16px, 4vw, 40px); background: #080808; border-bottom: 1px solid var(--line); }
 main { width: min(1180px, calc(100% - 32px)); margin: 28px auto; display: grid; gap: 20px; }
-h1, h2 { margin: 0; line-height: 1.2; letter-spacing: 0; }
+h1, h2, h3, p { margin-top: 0; }
+h1, h2 { margin-bottom: 0; line-height: 1.2; letter-spacing: -.03em; }
 h1 { font-size: 28px; }
 h2 { font-size: 18px; margin-bottom: 16px; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .section-heading h2 { margin-bottom: 0; }
 .auth-shell { min-height: 100vh; display: grid; place-items: center; margin: 0 auto; }
-.panel { background: #ffffff; border: 1px solid #d9e0e7; border-radius: 8px; padding: 20px; box-shadow: 0 1px 2px rgb(24 33 47 / 0.05); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
 .login-panel { width: min(420px, calc(100vw - 32px)); display: grid; gap: 16px; }
 form { margin: 0; }
 .grid-form, .mapping-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.3fr) minmax(180px, 1.3fr) auto; gap: 12px; align-items: end; }
-.mapping-row { grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.3fr) minmax(180px, 1.3fr) auto auto auto; padding: 14px 0; border-top: 1px solid #e6ebf0; }
+.mapping-row { grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.3fr) minmax(180px, 1.3fr) auto auto auto; padding: 14px 0; border-top: 1px solid var(--line); }
 .mapping-row:first-child { border-top: 0; padding-top: 0; }
-label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; color: #445166; }
+label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; color: var(--muted); }
 label.checkbox { display: flex; align-items: center; gap: 8px; height: 40px; }
-input { width: 100%; min-height: 40px; border: 1px solid #b9c3d0; border-radius: 6px; padding: 8px 10px; font: inherit; color: #18212f; background: #ffffff; }
-button { min-height: 40px; border: 0; border-radius: 6px; padding: 0 14px; font: inherit; font-weight: 700; color: #ffffff; background: #176b5f; cursor: pointer; }
-button.secondary { color: #18212f; background: #e8edf2; }
-button.danger { background: #a8323a; }
-.error { margin: 0; color: #a8323a; font-weight: 700; }
-.muted { margin: 0; color: #68758a; }
+input { width: 100%; min-height: 40px; border: 1px solid #38383f; border-radius: 6px; padding: 8px 10px; font: inherit; color: #ffffff; background: #080808; }
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+button, .button-link { min-height: 40px; border: 1px solid var(--accent); border-radius: 7px; padding: 0 14px; font: inherit; font-weight: 750; color: #050505; background: var(--accent); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+button.secondary, button.danger { color: #ffffff; background: transparent; border-color: #4a4a52; }
+.error { margin: 0; color: var(--accent); font-weight: 700; }
+.muted { margin: 0; color: var(--muted); }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { padding: 10px 12px; border-top: 1px solid #e6ebf0; text-align: left; vertical-align: top; }
-th { border-top: 0; color: #445166; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+th, td { padding: 10px 12px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { border-top: 0; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .nowrap { white-space: nowrap; }
-.badge { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 750; background: #e8edf2; }
-.token-valid { color: #126154; background: #dff4ed; }
-.token-invalid, .token-missing { color: #8d2830; background: #f9e2e4; }
+.badge { display: inline-block; border: 1px solid #42424a; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 750; background: #17171a; }
+.token-valid { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.token-invalid, .token-missing { color: #ffffff; }
+.brand { color: #ffffff; font-weight: 850; letter-spacing: -.02em; text-decoration: none; }
+.site-header { position: sticky; top: 0; z-index: 5; padding-block: 18px; }
+.site-header nav { display: flex; align-items: center; gap: clamp(14px, 3vw, 30px); }
+.site-header nav > a:not(.button-link) { color: var(--muted); font-size: 14px; text-decoration: none; }
+.site-header .button-link { min-height: 36px; }
+.home { gap: 110px; margin-top: 0; margin-bottom: 80px; }
+.hero { min-height: 720px; display: grid; align-content: center; justify-items: center; padding: 76px 0 30px; text-align: center; }
+.eyebrow { margin-bottom: 16px; color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.hero h1 { max-width: 900px; font-size: clamp(52px, 8vw, 102px); line-height: .96; }
+.hero h1 span { color: var(--accent); }
+.lede { max-width: 690px; margin: 28px auto 0; color: var(--muted); font-size: clamp(17px, 2vw, 20px); line-height: 1.65; }
+.hero-actions { display: flex; align-items: center; gap: 24px; margin-top: 30px; }
+.text-link { font-weight: 700; text-decoration: none; }
+.text-link span { color: var(--accent); }
+.message-demo { width: min(660px, 100%); margin-top: 70px; padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: #09090a; text-align: left; }
+.message { width: fit-content; max-width: 78%; margin-bottom: 14px; padding: 13px 16px; border-radius: 4px 14px 14px 14px; background: #1a1a1e; }
+.message:last-child { margin-bottom: 0; }
+.message.source { margin-left: auto; border-radius: 14px 4px 14px 14px; }
+.message span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.message p { margin: 0; }
+.message.accent-message { border: 1px solid var(--accent); background: var(--accent-soft); }
+.docs-section { scroll-margin-top: 100px; }
+.section-intro { max-width: 600px; margin-bottom: 34px; }
+.section-intro h2, .setup h2 { font-size: clamp(32px, 5vw, 52px); }
+.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.feature { min-height: 260px; padding: 28px; }
+.feature .step { color: var(--accent); font-family: ui-monospace, monospace; font-size: 13px; }
+.feature h3 { margin: 70px 0 12px; font-size: 21px; }
+.feature p, .command p { margin-bottom: 0; color: var(--muted); line-height: 1.6; }
+.usage-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 70px; align-items: start; }
+.command { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; padding: 28px 0; border-top: 1px solid var(--line); }
+.command:last-child { border-bottom: 1px solid var(--line); }
+.command > div > code { color: var(--accent); font-size: 18px; font-weight: 800; }
+.command .example { padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; background: #0e0e10; white-space: nowrap; }
+.setup { display: flex; align-items: center; justify-content: space-between; gap: 40px; padding: clamp(28px, 5vw, 54px); }
+.setup > div { max-width: 720px; }
+.setup .muted { line-height: 1.6; }
+footer { display: flex; justify-content: space-between; gap: 20px; padding: 28px clamp(16px, 4vw, 40px); border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 @media (max-width: 850px) {
   header { align-items: flex-start; flex-direction: column; }
   .grid-form, .mapping-row { grid-template-columns: 1fr; align-items: stretch; }
   label.checkbox { height: auto; }
+  .site-header { align-items: center; flex-direction: row; }
+  .site-header nav > a:not(.button-link) { display: none; }
+  .home { gap: 80px; }
+  .hero { min-height: auto; padding-top: 100px; }
+  .feature-grid, .usage-grid { grid-template-columns: 1fr; }
+  .usage-grid { gap: 20px; }
+  .command { grid-template-columns: 1fr; }
+  .command .example { white-space: normal; }
+  .setup { align-items: flex-start; flex-direction: column; }
+  footer { flex-direction: column; }
 }
 `
