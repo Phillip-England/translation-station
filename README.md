@@ -1,6 +1,6 @@
 # translation-bot
 
-translation-bot receives GroupMe bot callbacks and reposts Ollama translations when a message starts with `$spanish` or `$english`.
+translation-bot receives GroupMe bot callbacks and reposts Ollama translations when a message starts with `$spanish` or `$english`. It immediately posts `Thinking...` after accepting a translation request, then posts the translation when Ollama finishes.
 
 Configured GroupMe groups are managed in the private admin portal instead of hardcoded environment variables.
 

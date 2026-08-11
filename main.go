@@ -315,6 +315,12 @@ func (s *appServer) handleWebhook(c *gin.Context) {
 		return
 	}
 
+	if err := postGroupmeMessage(groupmeBotID, "Thinking..."); err != nil {
+		result = "GroupMe acknowledgement failed: " + truncateLogValue(err.Error(), 180)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	translatedText, err := translate(s.cfg.OllamaURL, s.cfg.OllamaModel, targetLanguage, subString)
 	if err != nil {
 		result = "translation failed: " + truncateLogValue(err.Error(), 180)
