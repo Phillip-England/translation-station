@@ -28,8 +28,9 @@ import (
 )
 
 const (
-	configPath = "config/.env"
-	dbPath     = "data/main.sqlite"
+	configPath         = "config/.env"
+	dbPath             = "data/main.sqlite"
+	defaultOllamaModel = "translategemma:4b"
 
 	sessionCookieName = "uppr_session"
 	sessionTTL        = 12 * time.Hour
@@ -143,7 +144,7 @@ func loadServerConfig() (serverConfig, error) {
 		cfg.OllamaURL = "http://127.0.0.1:11434"
 	}
 	if cfg.OllamaModel == "" {
-		cfg.OllamaModel = "gemma3:1b"
+		cfg.OllamaModel = defaultOllamaModel
 	}
 	if _, _, err := net.SplitHostPort(cfg.Addr); err != nil {
 		if strings.HasPrefix(cfg.Addr, ":") {

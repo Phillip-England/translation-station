@@ -14,8 +14,8 @@
     },
     {
       "name": "OLLAMA_MODEL",
-      "description": "Ollama model used for translation.",
-      "example": "gemma3:1b",
+      "description": "Optional Ollama model override. Defaults to translategemma:4b.",
+      "example": "translategemma:4b",
       "required": false
     },
     {

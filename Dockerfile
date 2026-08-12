@@ -23,7 +23,7 @@ RUN set -eu; \
 		sleep 1; \
 	done; \
 	if [ "$ready" -ne 1 ]; then cat /tmp/ollama-build.log; kill "$ollama_pid"; exit 1; fi; \
-	ollama pull gemma3:1b; \
+	ollama pull translategemma:4b; \
 	kill "$ollama_pid"; \
 	wait "$ollama_pid" || true; \
 	rm -f /tmp/ollama-build.log

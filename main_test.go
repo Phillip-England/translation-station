@@ -37,7 +37,7 @@ func TestLoadServerConfigRequiresAdminValues(t *testing.T) {
 	if cfg.OllamaURL != "http://127.0.0.1:11434" {
 		t.Fatalf("expected default ollama URL, got %q", cfg.OllamaURL)
 	}
-	if cfg.OllamaModel != "gemma3:1b" {
+	if cfg.OllamaModel != "translategemma:4b" {
 		t.Fatalf("expected default ollama model, got %q", cfg.OllamaModel)
 	}
 }
@@ -213,7 +213,7 @@ func TestTranslateUsesOllamaGenerate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	translated, err := translate(server.URL, "gemma3:1b", "Spanish", "Hello world")
+	translated, err := translate(server.URL, "translategemma:4b", "Spanish", "Hello world")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,8 +221,8 @@ func TestTranslateUsesOllamaGenerate(t *testing.T) {
 	if translated != "Hola mundo" {
 		t.Fatalf("expected translated text, got %q", translated)
 	}
-	if request.Model != "gemma3:1b" {
-		t.Fatalf("expected gemma3:1b model, got %q", request.Model)
+	if request.Model != "translategemma:4b" {
+		t.Fatalf("expected translategemma:4b model, got %q", request.Model)
 	}
 	if request.Stream {
 		t.Fatal("expected non-streaming request")

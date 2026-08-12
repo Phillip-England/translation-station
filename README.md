@@ -11,7 +11,6 @@ Runtime settings are loaded from `config/.env`. The supported variables are docu
 ```text
 ADDR=0.0.0.0:9917
 OLLAMA_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=gemma3:1b
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-this-password
 SESSION_SECRET=replace-with-a-long-random-secret
@@ -32,7 +31,7 @@ The request history is visible at `/admin` after signing in. It also shows each 
 
 ```bash
 go mod tidy
-ollama pull gemma3:1b
+ollama pull translategemma:4b
 go run .
 ```
 
@@ -52,6 +51,6 @@ docker run --rm -p 9917:9917 \
   translation-bot
 ```
 
-The image includes Ollama and the `gemma3:1b` model. Its entrypoint starts Ollama on container loopback before starting the bot, so the default `OLLAMA_URL=http://127.0.0.1:11434` works without another service. Ollama is not exposed outside the container.
+The application uses `translategemma:4b` by default, so `OLLAMA_MODEL` does not need to be configured. The image includes Ollama and that model. Its entrypoint starts Ollama on container loopback before starting the bot, so the default `OLLAMA_URL=http://127.0.0.1:11434` works without another service. Ollama is not exposed outside the container.
 
 The container listens on `0.0.0.0:9917`, reads `/app/config/.env`, and stores persistent state in `/app/data/main.sqlite`.
